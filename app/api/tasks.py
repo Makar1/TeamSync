@@ -4,12 +4,15 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 
 from app.models.team_member import TeamRole
-from app.models.task import Task, TaskComment
+from app.models.task import Task, TaskComment, TaskStatus
+
 from app.models.team_member import TeamMember
 from app.schemas.teams import  TeamMemberResponse, TeamJoin, TeamResponse, TeamCreate
 from app.dependencies import  generate_invite_code, get_current_user, get_team_membership
 from  app.db.session import get_db
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate, TaskStatusUpdate, TaskCommentCreate, TaskCommentResponse
+from app.schemas.evaluation import  EvaluationCreate, EvaluationResponse
+from app.models.evaluation import Evaluation
 
 
 tasks_router = APIRouter(prefix='/teams/{team_id}/tasks', tags=['tasks'])
@@ -102,6 +105,7 @@ def update_task_status(task_id: int, status_data: TaskStatusUpdate, db: Session 
     db.refresh(task)
     return task
 
+
 comments_router = APIRouter(prefix='/tasks', tags=['tasks'])
 @comments_router.post('/{task_id}/comments', response_model=TaskCommentResponse)
 def create_comment(task_id: int, comment_data: TaskCommentCreate, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -122,3 +126,29 @@ def create_comment(task_id: int, comment_data: TaskCommentCreate, db: Session = 
     db.commit()
     db.refresh(comment)
     return comment
+
+
+evaluations_router = APIRouter(prefix='/tasks', tags=['evaluations'])
+@evaluations_router.post('/{task_id}/evaluation',response_model=EvaluationResponse)
+def create_evaluation(task_id: int, eval_data: EvaluationCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if task is None:
+        raise HTTPException(404, "Нет такой задачи")
+    membership = db.query(TeamMember).filter(TeamMember.team_id == task.team_id, TeamMember.user_id == current_user.id).first()
+    if membership is None:
+        raise HTTPException(403, "Вы не состоите в этой команде")
+    if membership.role != TeamRole.MANAGER:
+        raise HTTPException(403, "Только менеджер может оценивать задачи")
+    if task.status != TaskStatus.DONE:
+        raise HTTPException(400, "Оценивать можно только задачи в статусе done")
+    if task.assignee_id is None:
+        raise HTTPException(400, "У задачи нет исполнителя")
+    existing = db.query(Evaluation).filter(Evaluation.task_id == task_id).first()
+    if existing is not None:
+        raise HTTPException(409, "Эта задача уже оценена")
+    evaluation = Evaluation(task_id=task_id, evaluator_id=current_user.id, score=eval_data.score,
+                            comment=eval_data.comment)
+    db.add(evaluation)
+    db.commit()
+    db.refresh(evaluation)
+    return evaluation

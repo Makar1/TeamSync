@@ -5,7 +5,8 @@ from app.core.config import settings
 from app.api.auth import router as auth_router
 from app.api.users import router as get_user_router
 from app.api.teams import router as team_router
-from app.api.tasks import tasks_router, comments_router
+from app.api.tasks import tasks_router, comments_router, evaluations_router
+from app.api.meetings import meetings_router
 
 def create_app() -> FastAPI:
     """Application factory."""
@@ -29,6 +30,8 @@ def create_app() -> FastAPI:
     app.include_router(team_router)
     app.include_router(tasks_router)
     app.include_router(comments_router)
+    app.include_router(meetings_router)
+    app.include_router(evaluations_router)
 
     # Health check
     @app.get("/health")
