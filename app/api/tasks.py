@@ -153,3 +153,11 @@ def create_evaluation(task_id: int, eval_data: EvaluationCreate, db: Session = D
     db.commit()
     db.refresh(evaluation)
     return evaluation
+
+
+@tasks_router.get('/{task_id}', response_model=TaskResponse)
+def get_task(task_id: int, db: Session = Depends(get_db), membership: TeamMember = Depends(get_team_membership)):
+    task = db.query(Task).filter(Task.id == task_id, Task.team_id == membership.team_id).first()
+    if task is None:
+        raise HTTPException(status_code=404, detail="Нет такой задачи")
+    return task

@@ -1,12 +1,9 @@
 from fastapi import APIRouter, Depends,HTTPException, status
 from sqlalchemy.orm import Session
-
-from app.models.user import User
-
 from app.models.meeting import Meeting, MeetingParticipant
 from app.schemas.meeting import  MeetingCreate, MeetingResponse, MeetingUpdate
 from app.services.meeting import has_overlap
-from app.dependencies import  generate_invite_code, get_current_user, get_team_membership
+from app.dependencies import get_team_membership
 from app.models.team_member import TeamMember
 from app.models.team_member import TeamRole
 from app.db.session import get_db
@@ -121,3 +118,15 @@ def delete_meeting(meeting_id: int, db: Session = Depends(get_db), membership: T
         participant_ids=participant_ids
     )
 
+@meetings_router.get('', response_model=list[MeetingResponse])
+def list_meetings(db: Session = Depends(get_db), membership: TeamMember = Depends(get_team_membership)):
+    meetings_raw = db.query(Meeting).filter(Meeting.team_id == membership.team_id).all()
+    return [
+        MeetingResponse(
+            id=m.id, title=m.title, team_id=m.team_id,
+            starts_at=m.starts_at, ends_at=m.ends_at,
+            organizer_id=m.organizer_id, created_at=m.created_at,
+            participant_ids=[p.user_id for p in m.participants]
+        )
+        for m in meetings_raw
+    ]

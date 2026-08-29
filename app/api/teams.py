@@ -6,7 +6,7 @@ from app.models.user import User
 from app.models.team_member import TeamRole
 from app.models.team import Team
 from app.models.team_member import TeamMember
-from app.schemas.teams import  TeamMemberResponse, TeamJoin, TeamResponse, TeamCreate
+from app.schemas.teams import  TeamMemberResponse, TeamJoin, TeamResponse, TeamCreate, RoleUpdate
 from app.dependencies import  generate_invite_code, get_current_user, get_team_membership
 from  app.db.session import get_db
 
@@ -71,5 +71,31 @@ def list_team_membership(team_id: int, db: Session = Depends(get_db), membership
     result = [TeamMemberResponse(id=m.id, name=m.user.name, role=m.role) for m in team.members]
     return result
 
+@router.patch('/{team_id}/members/{user_id}/role', response_model=TeamMemberResponse)
+def update_member_role(team_id: int, user_id: int, role_data: RoleUpdate, db: Session = Depends(get_db), membership: TeamMember = Depends(get_team_membership)):
+    if membership.role != TeamRole.MANAGER:
+        raise HTTPException(status_code=403, detail="Только менеджер может менять роли участников")
 
+    target = db.query(TeamMember).filter(TeamMember.team_id == team_id, TeamMember.user_id == user_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="Этот пользователь не состоит в команде")
 
+    target.role = role_data.role
+    db.commit()
+    db.refresh(target)
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    return TeamMemberResponse(id=target.id, name=target_user.name, role=target.role)
+
+@router.delete('/{team_id}/members/{user_id}', status_code=204)
+def remove_member(team_id: int, user_id: int, db: Session = Depends(get_db), membership: TeamMember = Depends(get_team_membership)):
+    if membership.role != TeamRole.MANAGER:
+        raise HTTPException(status_code=403, detail="Только менеджер может исключать участников")
+
+    target = db.query(TeamMember).filter(TeamMember.team_id == team_id, TeamMember.user_id == user_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="Этот пользователь не состоит в команде")
+
+    db.delete(target)
+    db.commit()
+    return None

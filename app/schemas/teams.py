@@ -23,3 +23,5 @@ class TeamMemberResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class RoleUpdate(BaseModel):
+    role: TeamRole
