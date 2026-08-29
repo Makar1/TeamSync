@@ -2,18 +2,14 @@ from fastapi import APIRouter, Depends,HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.models.user import User
-
 from app.models.team_member import TeamRole
-from app.models.task import Task, TaskComment, TaskStatus
-
+from app.models.task import Task, TaskComment
 from app.models.team_member import TeamMember
-from app.schemas.teams import  TeamMemberResponse, TeamJoin, TeamResponse, TeamCreate
-
-from app.dependencies import  generate_invite_code, get_current_user, get_team_membership
+from app.dependencies import  get_current_user, get_team_membership
 from  app.db.session import get_db
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate, TaskStatusUpdate, TaskCommentCreate, TaskCommentResponse
-from app.schemas.evaluation import  EvaluationCreate, EvaluationResponse, MyEvaluationsResponse
-from app.models.evaluation import Evaluation
+from app.schemas.evaluation import  EvaluationCreate, EvaluationResponse
+from app.services.evaluation import create_evaluation_for_task, TaskNotEvaluableError, AlreadyEvaluatedError
 
 
 tasks_router = APIRouter(prefix='/teams/{team_id}/tasks', tags=['tasks'])
@@ -135,23 +131,21 @@ def create_evaluation(task_id: int, eval_data: EvaluationCreate, db: Session = D
     task = db.query(Task).filter(Task.id == task_id).first()
     if task is None:
         raise HTTPException(404, "Нет такой задачи")
-    membership = db.query(TeamMember).filter(TeamMember.team_id == task.team_id, TeamMember.user_id == current_user.id).first()
+
+    membership = db.query(TeamMember).filter(TeamMember.team_id == task.team_id,
+                                             TeamMember.user_id == current_user.id).first()
     if membership is None:
         raise HTTPException(403, "Вы не состоите в этой команде")
     if membership.role != TeamRole.MANAGER:
         raise HTTPException(403, "Только менеджер может оценивать задачи")
-    if task.status != TaskStatus.DONE:
-        raise HTTPException(400, "Оценивать можно только задачи в статусе done")
-    if task.assignee_id is None:
-        raise HTTPException(400, "У задачи нет исполнителя")
-    existing = db.query(Evaluation).filter(Evaluation.task_id == task_id).first()
-    if existing is not None:
-        raise HTTPException(409, "Эта задача уже оценена")
-    evaluation = Evaluation(task_id=task_id, evaluator_id=current_user.id, score=eval_data.score,
-                            comment=eval_data.comment)
-    db.add(evaluation)
-    db.commit()
-    db.refresh(evaluation)
+
+    try:
+        evaluation = create_evaluation_for_task(db, task, current_user.id, eval_data.score, eval_data.comment)
+    except TaskNotEvaluableError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except AlreadyEvaluatedError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
     return evaluation
 
 
