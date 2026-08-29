@@ -7,6 +7,7 @@ from app.api.users import router as get_user_router
 from app.api.teams import router as team_router
 from app.api.tasks import tasks_router, comments_router, evaluations_router
 from app.api.meetings import meetings_router
+from app.api.calendar import calendar_router
 
 def create_app() -> FastAPI:
     """Application factory."""
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(comments_router)
     app.include_router(meetings_router)
     app.include_router(evaluations_router)
+    app.include_router(calendar_router)
 
     # Health check
     @app.get("/health")

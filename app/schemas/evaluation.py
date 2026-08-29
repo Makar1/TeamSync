@@ -17,3 +17,6 @@ class EvaluationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MyEvaluationsResponse(BaseModel):
+    evaluations: list[EvaluationResponse]
+    average_score: float | None
